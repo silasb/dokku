@@ -1,4 +1,10 @@
 #!/bin/bash
+
+function create-app {
+  local unique_name=$(ruby -rrufus-mnemo -e "puts \"#{Rufus::Mnemo.from_integer(Random.rand(9999-1000) + 1000)}-#{Rufus::Mnemo.from_integer(Random.rand(9999-1000) + 1000)}-#{Random.rand(9999-1000) + 1000}\"")
+  echo $unique_name
+}
+
 case "$1" in
   logs)
     CONTAINER=$(</home/git/$USER/CONTAINER)
@@ -11,6 +17,15 @@ case "$1" in
   
   delete-user)
   
+    ;;
+
+  create)
+    unique_name=$(create-app)
+    echo "Creating $unique_name... done"
+    echo "http://$unique_name.dokku.com | git@dokku.com:$unique_name.git"
+    ssh root@dokku.local "mkdir ~git/${unique_name}.git && cd ~git/${unique_name}.git && git init --bare" > /dev/null
+    git remote add dokku git@dokku.com:$unique_name.git > /dev/null
+    echo "Git remote heroku added"
     ;;
 
   *)
