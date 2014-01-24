@@ -82,6 +82,20 @@ case "$1" in
     }
     ;;
 
+  apps)
+    set +e
+    APPS=$(ls -d $DOKKU_ROOT/*/ 2>/dev/null)
+    set -e
+    if [[ -z "$APPS" ]]; then
+      echo "No Apps"
+    else
+      for app in $APPS; do
+        APP=$(basename $app);
+        echo $APP
+      done
+    fi
+    ;;
+
   help)
     cat && cat<<EOF
     delete <app>                                    Delete an application
