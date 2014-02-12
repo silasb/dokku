@@ -1,0 +1,3 @@
+[submodule "plugins/postgresql"]
+	path = plugins/postgresql
+	url = https://github.com/silasb/dokku-pg-plugin
