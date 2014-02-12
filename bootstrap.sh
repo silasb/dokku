@@ -24,6 +24,9 @@ elif [[ -n $DOKKU_TAG ]]; then
   git checkout $DOKKU_TAG
 fi
 
+git submodule init
+git submodule update
+
 make install
 
 echo
