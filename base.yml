@@ -1,0 +1,107 @@
+---
+- hosts: all
+  sudo: yes
+
+  vars: 
+    dokku_version: master
+    dokku_repo: https://github.com/silasb/dokku.git
+    dokku_branch: my-server 
+    dokku_stack_url: http://foo.us.to/progrium_buildstep_latest.tgz
+    sshcommand_url: https://raw.github.com/progrium/sshcommand/master/sshcommand
+    pluginhook_url: https://s3.amazonaws.com/progrium-pluginhook/pluginhook_0.1.0_amd64.deb
+    stack_url: https://github.com/progrium/buildstep.git
+    dokku_root: /home/dokku
+
+    env:
+      DOKKU_REPO: "{{ dokku_repo }}"
+      DOKKU_BRANCH: "{{ dokku_branch }}"
+      PREBUILT_STACK_URL: "{{ dokku_stack_url }}"
+
+  tasks:
+
+    - action: shell whoami
+      register: whoami
+
+    - name: ensure host is up
+      ping:
+
+    - name: update apt cache
+      apt: update_cache=yes cache_valid_time=3600
+
+    - name: ensure git make curl software-properties-common installed
+      apt: pkg={{ item }} state=present
+      with_items:
+        - git
+        - make
+        - curl
+        - software-properties-common
+        - python-pycurl
+        - python-apt
+
+    - name: ensure we have dokku repo
+      git: repo={{ dokku_repo }} dest=/tmp/dokku version={{ dokku_branch }}
+
+    - name: download sshcommand
+      command: wget -qO /usr/local/bin/sshcommand {{ sshcommand_url }}
+
+    - name: make sure sshcommand is executable
+      file: path=/usr/local/bin/sshcommand mode=0744
+
+    - name: run sshcommand do?
+      command: /usr/local/bin/sshcommand create dokku /usr/local/bin/dokku
+
+    - name: download pluginhook
+      command: wget -qO /tmp/pluginhook_0.1.0_amd64.deb {{ pluginhook_url }}
+
+    - name: install pluginhook
+      command: dpkg -i /tmp/pluginhook_0.1.0_amd64.deb
+
+    - name: ensure aufs
+      shell: lsmod | grep aufs || modprobe aufs || apt-get install -y linux-image-extra-`uname -r`
+
+    - name: ensure docker group
+      group: name=docker
+             state=present
+
+    - name: ensure dokku user is apart of the docker group
+      user: name=dokku
+            state=present
+            groups="docker"
+
+    - name: add docker repo
+      apt_repository: repo='deb http://get.docker.io/ubuntu docker main'
+                      state=present
+
+    - name: add docker key
+      apt_key: url=https://get.docker.io/gpg
+               state=present
+
+    - name: install docker
+      apt: name=lxc-docker state=present update_cache=yes
+
+    - name: wait for docker
+      pause: seconds=2
+
+    - name: stack
+      shell: docker images | grep progrium/buildstep || curl {{ dokku_stack_url }} | gunzip -cd | docker import - progrium/buildstep
+
+    - name: copy dokku binary to bin
+      command: cp /tmp/dokku/dokku /usr/local/bin/dokku
+
+    - name: make sure dokku directory exists
+      file: path=/var/lib/dokku/plugins state=directory recurse=yes
+
+    - name: copy dokku plugins to right path
+      command: cp -r /tmp/dokku/plugins/ /var/lib/dokku/
+
+    - name: install dokku plugins
+      shell: dokku plugins-install
+
+    - name: capture dokku version
+      shell: cd /tmp/dokku && git describe --tags > {{ dokku_root }}/VERSION
+
+    - name: install local ssh key
+      copy: src=~/.ssh/id_rsa.pub dest=/tmp/id_rsa.pub
+
+    - name: load key into dokku user
+      shell: cat /tmp/id_rsa.pub | sshcommand acl-add dokku {{ whoami.stdout }}
